@@ -1,199 +1,670 @@
-// src/services/surveys.service.js
+/**
+ * 설문 서비스 - 비즈니스 로직 처리
+ */
 const Survey = require('../models/survey.model');
+const logger = require('../utils/logger');
+const { PAGINATION, SURVEY, AGE_GROUPS, MESSAGES } = require('../utils/constants');
+const {
+  isValidObjectId,
+  isValidDateFormat,
+  normalizeQuestionResponse,
+  normalizeAge,
+  normalizeUserId,
+  sanitizeString,
+  normalizePagination,
+  removeEmptyValues
+} = require('../utils/helpers');
 
-async function getAllSurveys(page = 1, limit = 10) {
+/**
+ * 페이지네이션된 설문 목록 조회
+ * @param {number} page - 페이지 번호 (1부터 시작)
+ * @param {number} limit - 페이지당 항목 수
+ * @param {Object} filters - 필터 조건
+ * @returns {Object} 페이지네이션된 설문 데이터
+ */
+async function getAllSurveys(page = 1, limit = PAGINATION.DEFAULT_LIMIT, filters = {}) {
   try {
-    const skip = (page - 1) * limit;
+    logger.debug('설문 목록 조회 시작', { page, limit, filters });
+    
+    // 입력값 검증 및 정규화
+    const pagination = normalizePagination(page, limit);
+    
+    // 필터 조건 구성
+    const query = buildQueryFilters(filters);
+    
+    logger.debug('쿼리 조건', { query, pagination });
 
-    const totalSurveys = await Survey.countDocuments();
+    // 병렬 실행으로 성능 최적화
+    const [surveys, totalSurveys] = await Promise.all([
+      Survey.find(query)
+        .sort({ createdAt: -1 })
+        .skip(pagination.skip)
+        .limit(pagination.limit)
+        .lean()
+        .select('-__v') // 버전 필드 제외
+        .exec(),
+      Survey.countDocuments(query).exec()
+    ]);
 
-    const surveys = await Survey.find({})
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
-
-    return {
+    const result = {
       surveys,
       totalSurveys,
-      totalPages: Math.ceil(totalSurveys / limit),
-      currentPage: page,
+      totalPages: Math.ceil(totalSurveys / pagination.limit),
+      currentPage: pagination.page,
+      pageSize: pagination.limit,
+      hasNextPage: pagination.page < Math.ceil(totalSurveys / pagination.limit),
+      hasPrevPage: pagination.page > 1
     };
-  } catch (error) {
-    console.error('[SERVICE ERROR] in getAllSurveys:', error);
-    throw error;
-  }
-}
-
-async function createSurvey(payload) {
-  const survey = new Survey(payload);
-  await survey.save();
-  return survey;
-}
-
-async function getSurveyStats() {
-  const allSurveys = await Survey.find({});
-  console.log('[DEBUG] 전체 설문 수:', allSurveys.length);
-  console.log('[DEBUG] 첫 번째 설문 데이터:', allSurveys[0]);
-  
-  if (allSurveys.length === 0) {
-    return {
-      totalSurveys: 0,
-      ageDistribution: [],
-      heatmapData: [],
-      dailyCount: [],
-      hourlyCount: [],
-      question1Distribution: {},
-      question2Distribution: {},
-      question3Distribution: {},
-      question4Distribution: {},
-      question5Distribution: {},
-      question6Distribution: {},
-      question7Distribution: {},
-      question8Distribution: {},
-      message: "No data available."
-    };
-  }
-
-  const ageDistribution = {};
-  const dailyHourlyCount = {};
-  const dailyCounts = {};
-  const hourlyCounts = {};
-  const question1Distribution = {};
-  const question2Distribution = {};
-  const question3Distribution = {};
-  const question4Distribution = {};
-  const question5Distribution = {};
-  const question6Distribution = {};
-  const question7Distribution = {};
-  const question8Distribution = {};
-
-  allSurveys.forEach(survey => {
-    // 1. 연령대별 분포 집계
-    const age = survey.age;
-    if (age <= 19) ageDistribution['10대 이하'] = (ageDistribution['10대 이하'] || 0) + 1;
-    else if (age >= 20 && age <= 29) ageDistribution['20대'] = (ageDistribution['20대'] || 0) + 1;
-    else if (age >= 30 && age <= 39) ageDistribution['30대'] = (ageDistribution['30대'] || 0) + 1;
-    else if (age >= 40 && age <= 49) ageDistribution['40대'] = (ageDistribution['40대'] || 0) + 1;
-    else if (age >= 50 && age <= 59) ageDistribution['50대'] = (ageDistribution['50대'] || 0) + 1;
-    else if (age >= 60 && age <= 69) ageDistribution['60대'] = (ageDistribution['60대'] || 0) + 1;
-    else if (age >= 70 && age <= 79) ageDistribution['70대'] = (ageDistribution['70대'] || 0) + 1;
-    else ageDistribution['80대 이상'] = (ageDistribution['80대 이상'] || 0) + 1;
-
-    // 2. 날짜, 시간대별 데이터 집계
-    const date = new Date(survey.createdAt).toISOString().split('T')[0];
-    const hour = new Date(survey.createdAt).getHours();
     
-    if (!dailyHourlyCount[date]) {
-      dailyHourlyCount[date] = {};
-    }
-    dailyHourlyCount[date][hour] = (dailyHourlyCount[date][hour] || 0) + 1;
-    
-    dailyCounts[date] = (dailyCounts[date] || 0) + 1;
-    hourlyCounts[hour] = (hourlyCounts[hour] || 0) + 1;
-
-    // 3. 새로운 8개 심리 평가 질문에 대한 응답 분포 집계
-    if (survey.question1) {
-      question1Distribution[survey.question1] = (question1Distribution[survey.question1] || 0) + 1;
-    }
-    if (survey.question2) {
-      question2Distribution[survey.question2] = (question2Distribution[survey.question2] || 0) + 1;
-    }
-    if (survey.question3) {
-      question3Distribution[survey.question3] = (question3Distribution[survey.question3] || 0) + 1;
-    }
-    if (survey.question4) {
-      question4Distribution[survey.question4] = (question4Distribution[survey.question4] || 0) + 1;
-    } else {
-      console.log('[DEBUG] question4 없음:', survey._id);
-    }
-    if (survey.question5) {
-      question5Distribution[survey.question5] = (question5Distribution[survey.question5] || 0) + 1;
-    } else {
-      console.log('[DEBUG] question5 없음:', survey._id);
-    }
-    if (survey.question6) {
-      question6Distribution[survey.question6] = (question6Distribution[survey.question6] || 0) + 1;
-    } else {
-      console.log('[DEBUG] question6 없음:', survey._id);
-    }
-    if (survey.question7) {
-      question7Distribution[survey.question7] = (question7Distribution[survey.question7] || 0) + 1;
-    } else {
-      console.log('[DEBUG] question7 없음:', survey._id);
-    }
-    if (survey.question8) {
-      question8Distribution[survey.question8] = (question8Distribution[survey.question8] || 0) + 1;
-    } else {
-      console.log('[DEBUG] question8 없음:', survey._id);
-    }
-  });
-
-  // 히트맵 데이터를 위한 배열 변환
-  const heatmapData = [];
-  Object.keys(dailyHourlyCount).forEach(date => {
-    Object.keys(dailyHourlyCount[date]).forEach(hour => {
-      heatmapData.push({
-        date,
-        hour: parseInt(hour),
-        count: dailyHourlyCount[date][hour],
-      });
+    logger.info('설문 목록 조회 완료', { 
+      totalSurveys, 
+      returnedCount: surveys.length,
+      currentPage: pagination.page 
     });
-  });
+    
+    return result;
+    
+  } catch (error) {
+    logger.error('설문 목록 조회 실패', { error: error.message, page, limit, filters });
+    throw new Error(`설문 목록 조회 실패: ${error.message}`);
+  }
+}
 
-  console.log('[DEBUG] question4Distribution:', question4Distribution);
-  console.log('[DEBUG] question5Distribution:', question5Distribution);
-  console.log('[DEBUG] question6Distribution:', question6Distribution);
-  console.log('[DEBUG] question7Distribution:', question7Distribution);
-  console.log('[DEBUG] question8Distribution:', question8Distribution);
+/**
+ * 쿼리 필터 조건 구성
+ * @param {Object} filters - 필터 조건
+ * @returns {Object} MongoDB 쿼리 객체
+ */
+function buildQueryFilters(filters) {
+  const query = {};
+
+  if (filters.startDate || filters.endDate) {
+    query.createdAt = {};
+    if (filters.startDate) {
+      query.createdAt.$gte = new Date(filters.startDate);
+    }
+    if (filters.endDate) {
+      query.createdAt.$lte = new Date(filters.endDate);
+    }
+  }
+
+  if (filters.minAge || filters.maxAge) {
+    query.age = {};
+    if (filters.minAge) {
+      query.age.$gte = parseInt(filters.minAge);
+    }
+    if (filters.maxAge) {
+      query.age.$lte = parseInt(filters.maxAge);
+    }
+  }
+
+  if (filters.isViewed !== undefined) {
+    query.isViewed = filters.isViewed === 'true' || filters.isViewed === true;
+  }
+
+  if (filters.name) {
+    query.name = { $regex: filters.name, $options: 'i' };
+  }
+
+  return query;
+}
+
+/**
+ * 새로운 설문 생성
+ * @param {Object} payload - 설문 데이터
+ * @returns {Object} 생성된 설문 객체
+ */
+async function createSurvey(payload) {
+  try {
+    // 입력 데이터 검증
+    validateSurveyPayload(payload);
+    
+    // 데이터 정규화 및 변환
+    const processedPayload = normalizeSurveyData(payload);
+    
+    console.log('[DEBUG] Creating survey with processed data:', processedPayload);
+    
+    // 설문 생성 및 저장
+    const survey = new Survey(processedPayload);
+    const savedSurvey = await survey.save();
+    
+    console.log('[DEBUG] Survey created successfully:', savedSurvey._id);
+    return savedSurvey;
+    
+  } catch (error) {
+    console.error('[SERVICE ERROR] createSurvey:', error);
+    throw new Error(`설문 생성 실패: ${error.message}`);
+  }
+}
+
+/**
+ * 설문 데이터 유효성 검증
+ * @param {Object} payload - 검증할 데이터
+ */
+function validateSurveyPayload(payload) {
+  const requiredFields = ['name', 'age', 'date', ...SURVEY.QUESTION_FIELDS];
+  
+  for (const field of requiredFields) {
+    if (payload[field] === undefined || payload[field] === null || payload[field] === '') {
+      throw new Error(`${field}는 필수 입력 항목입니다.`);
+    }
+  }
+  
+  // 날짜 형식 검증
+  if (!isValidDateFormat(payload.date)) {
+    throw new Error('날짜는 YYYY-MM-DD 형식이어야 합니다.');
+  }
+  
+  // 이름 길이 검증
+  if (payload.name && payload.name.length > SURVEY.MAX_NAME_LENGTH) {
+    throw new Error(`이름은 ${SURVEY.MAX_NAME_LENGTH}자를 초과할 수 없습니다.`);
+  }
+}
+
+/**
+ * 설문 데이터 정규화
+ * @param {Object} payload - 원본 데이터
+ * @returns {Object} 정규화된 데이터
+ */
+function normalizeSurveyData(payload) {
+  const processedPayload = { ...payload };
+  
+  // 이전 버전 호환성: question1이 배열인 경우 처리
+  if (Array.isArray(payload.question1)) {
+    logger.debug('레거시 배열 데이터 변환', { question1: payload.question1 });
+    processedPayload.question1 = payload.question1[0] || 1;
+  }
+  
+  // 숫자 필드 정규화
+  processedPayload.userId = normalizeUserId(payload.userId);
+  processedPayload.age = normalizeAge(payload.age);
+  
+  // 질문 응답 정규화
+  SURVEY.QUESTION_FIELDS.forEach(field => {
+    processedPayload[field] = normalizeQuestionResponse(payload[field]);
+  });
+  
+  // 이름 정규화
+  processedPayload.name = sanitizeString(payload.name, SURVEY.MAX_NAME_LENGTH);
+  
+  return processedPayload;
+}
+
+/**
+ * 사용자 ID 정규화
+ * @param {*} userId - 원본 사용자 ID
+ * @returns {number} 정규화된 사용자 ID (0-9999)
+ */
+function normalizeUserId(userId) {
+  const value = parseInt(userId);
+  return isNaN(value) ? 0 : Math.max(0, Math.min(9999, value));
+}
+
+/**
+ * 나이 정규화
+ * @param {*} age - 원본 나이
+ * @returns {number} 정규화된 나이 (1-100)
+ */
+function normalizeAge(age) {
+  const value = parseInt(age);
+  if (isNaN(value) || value < 1 || value > 100) {
+    throw new Error('나이는 1-100 사이의 숫자여야 합니다.');
+  }
+  return value;
+}
+
+/**
+ * 질문 응답 정규화
+ * @param {*} response - 원본 응답
+ * @param {string} fieldName - 필드명 (에러 메시지용)
+ * @returns {number} 정규화된 응답 (1-5)
+ */
+function normalizeQuestionResponse(response, fieldName) {
+  const value = parseInt(response);
+  if (isNaN(value) || value < 1 || value > 5) {
+    throw new Error(`${fieldName}은 1-5 사이의 숫자여야 합니다.`);
+  }
+  return value;
+}
+
+/**
+ * 설문 통계 데이터 조회
+ * @returns {Object} 통계 데이터 객체
+ */
+async function getSurveyStats() {
+  try {
+    console.log('[DEBUG] 설문 통계 조회 시작');
+    
+    // MongoDB Aggregation을 사용한 효율적인 통계 계산
+    const [
+      totalCount,
+      ageStats,
+      timeStats,
+      questionStats,
+      viewStats
+    ] = await Promise.all([
+      Survey.countDocuments(),
+      getAgeDistributionStats(),
+      getTimeDistributionStats(),
+      getQuestionDistributionStats(),
+      getViewingStats()
+    ]);
+
+    if (totalCount === 0) {
+      return createEmptyStatsResponse();
+    }
+
+    console.log('[DEBUG] 통계 계산 완료 - 총 설문 수:', totalCount);
+
+    return {
+      totalSurveys: totalCount,
+      ageDistribution: ageStats.distribution,
+      averageAge: ageStats.average,
+      dailyCount: timeStats.daily,
+      hourlyCount: timeStats.hourly,
+      heatmapData: timeStats.heatmap,
+      questionDistributions: questionStats,
+      viewingStats: viewStats,
+      summary: {
+        mostActiveHour: timeStats.mostActiveHour,
+        mostCommonAgeGroup: ageStats.mostCommon,
+        averageResponseScore: questionStats.overallAverage,
+        viewedPercentage: viewStats.viewedPercentage
+      }
+    };
+    
+  } catch (error) {
+    console.error('[SERVICE ERROR] getSurveyStats:', error);
+    throw new Error(`통계 조회 실패: ${error.message}`);
+  }
+}
+
+/**
+ * 빈 통계 응답 생성
+ */
+function createEmptyStatsResponse() {
+  const emptyDistribution = {};
+  CONSTANTS.QUESTION_FIELDS.forEach(field => {
+    emptyDistribution[`${field}Distribution`] = {};
+  });
 
   return {
-    totalSurveys: allSurveys.length,
-    ageDistribution: Object.entries(ageDistribution).map(([range, count]) => ({ range, count })).sort((a,b) => parseInt(a.range) - parseInt(b.range)),
-    dailyCount: Object.entries(dailyCounts).map(([date, count]) => ({ date, count })).sort((a, b) => new Date(a.date) - new Date(b.date)),
-    hourlyCount: Object.entries(hourlyCounts).map(([hour, count]) => ({ hour: parseInt(hour), count })).sort((a, b) => a.hour - b.hour),
-    question1Distribution,
-    question2Distribution,
-    question3Distribution,
-    question4Distribution,
-    question5Distribution,
-    question6Distribution,
-    question7Distribution,
-    question8Distribution,
-    heatmapData
+    totalSurveys: 0,
+    ageDistribution: [],
+    averageAge: 0,
+    dailyCount: [],
+    hourlyCount: [],
+    heatmapData: [],
+    questionDistributions: emptyDistribution,
+    viewingStats: { viewed: 0, notViewed: 0, viewedPercentage: 0 },
+    summary: {
+      mostActiveHour: null,
+      mostCommonAgeGroup: null,
+      averageResponseScore: 0,
+      viewedPercentage: 0
+    },
+    message: "데이터가 없습니다."
   };
 }
 
-async function updateSurvey(id, payload) {
-  const updateData = Object.fromEntries(
-    Object.entries(payload).filter(([_, v]) => v !== null && v !== undefined && v !== '')
-  );
-  return await Survey.findByIdAndUpdate(
-    id, { $set: updateData }, { new: true, runValidators: true, lean: true }
-  );
+/**
+ * 연령대별 분포 통계
+ */
+async function getAgeDistributionStats() {
+  const ageStats = await Survey.aggregate([
+    {
+      $group: {
+        _id: {
+          $switch: {
+            branches: [
+              { case: { $lte: ['$age', 19] }, then: '10대 이하' },
+              { case: { $lte: ['$age', 29] }, then: '20대' },
+              { case: { $lte: ['$age', 39] }, then: '30대' },
+              { case: { $lte: ['$age', 49] }, then: '40대' },
+              { case: { $lte: ['$age', 59] }, then: '50대' },
+              { case: { $lte: ['$age', 69] }, then: '60대' },
+              { case: { $lte: ['$age', 79] }, then: '70대' }
+            ],
+            default: '80대 이상'
+          }
+        },
+        count: { $sum: 1 },
+        averageAge: { $avg: '$age' }
+      }
+    },
+    { $sort: { _id: 1 } }
+  ]);
+
+  const overallAverage = await Survey.aggregate([
+    { $group: { _id: null, average: { $avg: '$age' } } }
+  ]);
+
+  const distribution = ageStats.map(stat => ({
+    range: stat._id,
+    count: stat.count,
+    averageAge: Math.round(stat.averageAge * 10) / 10
+  }));
+
+  const mostCommon = ageStats.reduce((max, current) => 
+    current.count > (max?.count || 0) ? current : max, null)?._id;
+
+  return {
+    distribution,
+    average: Math.round((overallAverage[0]?.average || 0) * 10) / 10,
+    mostCommon
+  };
 }
 
-async function deleteSurvey(id) {
-   console.log(`[DELETE SERVICE] ID: ${id}로 DB에서 문서를 찾아서 삭제를 시도합니다.`);
-  try {
-    const result = await Survey.findByIdAndDelete(id).lean();
+/**
+ * 시간대별 분포 통계
+ */
+async function getTimeDistributionStats() {
+  const [dailyStats, hourlyStats, heatmapStats] = await Promise.all([
+    // 일별 통계
+    Survey.aggregate([
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]),
     
-    if (result) {
-      console.log('[DELETE SERVICE] Mongoose가 성공적으로 문서를 찾아 삭제했습니다.');
-    } else {
-      console.log('[DELETE SERVICE] Mongoose가 해당 ID의 문서를 찾지 못했습니다. null을 반환합니다.');
+    // 시간별 통계
+    Survey.aggregate([
+      {
+        $group: {
+          _id: { $hour: '$createdAt' },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]),
+    
+    // 히트맵 데이터
+    Survey.aggregate([
+      {
+        $group: {
+          _id: {
+            date: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+            hour: { $hour: '$createdAt' }
+          },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { '_id.date': 1, '_id.hour': 1 } }
+    ])
+  ]);
+
+  const daily = dailyStats.map(stat => ({
+    date: stat._id,
+    count: stat.count
+  }));
+
+  const hourly = hourlyStats.map(stat => ({
+    hour: stat._id,
+    count: stat.count
+  }));
+
+  const heatmap = heatmapStats.map(stat => ({
+    date: stat._id.date,
+    hour: stat._id.hour,
+    count: stat.count
+  }));
+
+  const mostActiveHour = hourlyStats.reduce((max, current) => 
+    current.count > (max?.count || 0) ? current : max, null)?._id;
+
+  return { daily, hourly, heatmap, mostActiveHour };
+}
+
+/**
+ * 질문별 응답 분포 통계
+ */
+async function getQuestionDistributionStats() {
+  const questionStats = {};
+  let totalScore = 0;
+  let totalResponses = 0;
+
+  for (const field of CONSTANTS.QUESTION_FIELDS) {
+    const distribution = await Survey.aggregate([
+      {
+        $group: {
+          _id: `$${field}`,
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+
+    const distributionObj = {};
+    let fieldTotal = 0;
+    let fieldCount = 0;
+
+    distribution.forEach(item => {
+      distributionObj[item._id] = item.count;
+      fieldTotal += item._id * item.count;
+      fieldCount += item.count;
+    });
+
+    questionStats[`${field}Distribution`] = distributionObj;
+    questionStats[`${field}Average`] = fieldCount > 0 ? 
+      Math.round((fieldTotal / fieldCount) * 100) / 100 : 0;
+
+    totalScore += fieldTotal;
+    totalResponses += fieldCount;
+  }
+
+  questionStats.overallAverage = totalResponses > 0 ? 
+    Math.round((totalScore / totalResponses) * 100) / 100 : 0;
+
+  return questionStats;
+}
+
+/**
+ * 감상 여부 통계
+ */
+async function getViewingStats() {
+  const viewStats = await Survey.aggregate([
+    {
+      $group: {
+        _id: '$isViewed',
+        count: { $sum: 1 }
+      }
     }
-    return result;
+  ]);
+
+  const viewed = viewStats.find(stat => stat._id === true)?.count || 0;
+  const notViewed = viewStats.find(stat => stat._id === false)?.count || 0;
+  const total = viewed + notViewed;
+
+  return {
+    viewed,
+    notViewed,
+    total,
+    viewedPercentage: total > 0 ? Math.round((viewed / total) * 100) : 0
+  };
+}
+
+/**
+ * 설문 데이터 업데이트
+ * @param {string} id - 설문 ID
+ * @param {Object} payload - 업데이트할 데이터
+ * @returns {Object} 업데이트된 설문 객체
+ */
+async function updateSurvey(id, payload) {
+  try {
+    // ID 유효성 검증
+    if (!isValidObjectId(id)) {
+      throw new Error('유효하지 않은 설문 ID입니다.');
+    }
+
+    // 업데이트 가능한 필드만 필터링
+    const updateData = filterUpdateableFields(payload);
+    
+    if (Object.keys(updateData).length === 0) {
+      throw new Error('업데이트할 데이터가 없습니다.');
+    }
+
+    console.log(`[UPDATE SURVEY SERVICE] ID: ${id}, updateData:`, updateData);
+    
+    const updatedSurvey = await Survey.findByIdAndUpdate(
+      id, 
+      { $set: updateData }, 
+      { 
+        new: true, 
+        runValidators: true, 
+        lean: true,
+        select: '-__v' // 버전 필드 제외
+      }
+    );
+
+    if (!updatedSurvey) {
+      throw new Error('설문을 찾을 수 없습니다.');
+    }
+
+    console.log('[UPDATE SURVEY SERVICE] 설문이 성공적으로 업데이트되었습니다.');
+    return updatedSurvey;
+    
   } catch (error) {
-    console.error('[DELETE SERVICE] findByIdAndDelete 함수 실행 중 심각한 오류 발생:', error);
-    throw error;
+    console.error('[SERVICE ERROR] updateSurvey:', error);
+    throw new Error(`설문 업데이트 실패: ${error.message}`);
   }
 }
 
+/**
+ * 감상 여부 업데이트
+ * @param {string} id - 설문 ID
+ * @param {boolean} isViewed - 감상 여부
+ * @returns {Object} 업데이트된 설문 객체
+ */
+async function updateIsViewed(id, isViewed = true) {
+  try {
+    // ID 유효성 검증
+    if (!isValidObjectId(id)) {
+      throw new Error('유효하지 않은 설문 ID입니다.');
+    }
+
+    console.log(`[UPDATE ISVIEWED SERVICE] ID: ${id}, isViewed: ${isViewed}`);
+    
+    const result = await Survey.findByIdAndUpdate(
+      id, 
+      { $set: { isViewed: Boolean(isViewed) } }, 
+      { new: true, lean: true, select: '-__v' }
+    );
+    
+    if (!result) {
+      throw new Error('설문을 찾을 수 없습니다.');
+    }
+
+    console.log('[UPDATE ISVIEWED SERVICE] 감상여부가 성공적으로 업데이트되었습니다.');
+    return result;
+    
+  } catch (error) {
+    console.error('[SERVICE ERROR] updateIsViewed:', error);
+    throw new Error(`감상여부 업데이트 실패: ${error.message}`);
+  }
+}
+
+/**
+ * 설문 삭제
+ * @param {string} id - 설문 ID
+ * @returns {Object} 삭제된 설문 객체
+ */
+async function deleteSurvey(id) {
+  try {
+    // ID 유효성 검증
+    if (!isValidObjectId(id)) {
+      throw new Error('유효하지 않은 설문 ID입니다.');
+    }
+
+    console.log(`[DELETE SERVICE] ID: ${id} 설문 삭제 시도`);
+    
+    const deletedSurvey = await Survey.findByIdAndDelete(id, { lean: true });
+    
+    if (!deletedSurvey) {
+      console.log('[DELETE SERVICE] 삭제할 설문을 찾지 못했습니다.');
+      return null;
+    }
+
+    console.log('[DELETE SERVICE] 설문이 성공적으로 삭제되었습니다.');
+    return deletedSurvey;
+    
+  } catch (error) {
+    console.error('[SERVICE ERROR] deleteSurvey:', error);
+    throw new Error(`설문 삭제 실패: ${error.message}`);
+  }
+}
+
+/**
+ * 업데이트 가능한 필드 필터링
+ * @param {Object} payload - 원본 데이터
+ * @returns {Object} 필터링된 데이터
+ */
+function filterUpdateableFields(payload) {
+  const allowedFields = [
+    'name', 'age', 'date', 'isViewed',
+    ...CONSTANTS.QUESTION_FIELDS
+  ];
+
+  const updateData = {};
+
+  for (const [key, value] of Object.entries(payload)) {
+    if (!allowedFields.includes(key)) {
+      continue; // 허용되지 않은 필드는 무시
+    }
+
+    // 값 유효성 검사
+    if (value === null || value === undefined) {
+      continue; // null/undefined 값은 무시
+    }
+
+    // 빈 문자열 처리 (boolean은 예외)
+    if (typeof value === 'string' && value.trim() === '') {
+      continue;
+    }
+
+    // 질문 필드 검증
+    if (CONSTANTS.QUESTION_FIELDS.includes(key)) {
+      const normalizedValue = normalizeQuestionResponse(value, key);
+      updateData[key] = normalizedValue;
+    } else if (key === 'age') {
+      updateData[key] = normalizeAge(value);
+    } else if (key === 'name') {
+      updateData[key] = value.toString().trim();
+    } else {
+      updateData[key] = value;
+    }
+  }
+
+  return updateData;
+}
+
+/**
+ * MongoDB ObjectId 유효성 검증
+ * @param {string} id - 검증할 ID
+ * @returns {boolean} 유효성 여부
+ */
+function isValidObjectId(id) {
+  const mongoose = require('mongoose');
+  return mongoose.Types.ObjectId.isValid(id);
+}
+
+// 서비스 함수 내보내기
 module.exports = {
   createSurvey,
   getAllSurveys,
   getSurveyStats,
   updateSurvey,
+  updateIsViewed,
   deleteSurvey,
+  
+  // 유틸리티 함수들 (테스트용)
+  validateSurveyPayload,
+  normalizeSurveyData,
+  normalizeUserId,
+  normalizeAge,
+  normalizeQuestionResponse,
+  isValidObjectId
 };
