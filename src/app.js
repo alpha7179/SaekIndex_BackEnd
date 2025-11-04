@@ -25,11 +25,12 @@ function createApp() {
   // CORS 설정
   const corsOptions = {
     origin: process.env.NODE_ENV === 'production' 
-      ? ['https://your-frontend-domain.com'] // 프로덕션에서는 특정 도메인만 허용
-      : '*', // 개발 환경에서는 모든 도메인 허용
+      ? process.env.CORS_ORIGINS?.split(',') // 프로덕션에서는 특정 도메인만 허용
+      : true, // 개발 환경에서는 모든 도메인 허용
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+    optionsSuccessStatus: 200 // IE11 지원
   };
   
   app.use(cors(corsOptions));
