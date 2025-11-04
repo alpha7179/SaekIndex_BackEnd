@@ -10,27 +10,11 @@ let isConnected = false;
  * MongoDB 연결 옵션
  */
 const getConnectionOptions = () => ({
-  // 인덱스 관리
-  autoIndex: process.env.NODE_ENV !== 'production',
-  
   // 연결 풀 설정
   maxPoolSize: parseInt(process.env.DB_MAX_POOL_SIZE) || 10,
-  minPoolSize: parseInt(process.env.DB_MIN_POOL_SIZE) || 2,
   
   // 타임아웃 설정
   serverSelectionTimeoutMS: parseInt(process.env.DB_SERVER_TIMEOUT) || 10000,
-  socketTimeoutMS: parseInt(process.env.DB_SOCKET_TIMEOUT) || 45000,
-  connectTimeoutMS: parseInt(process.env.DB_CONNECT_TIMEOUT) || 10000,
-  
-  // 재연결 설정
-  maxIdleTimeMS: parseInt(process.env.DB_MAX_IDLE_TIME) || 30000,
-  
-  // 네트워크 설정
-  family: 4, // IPv4 사용
-  
-  // 버퍼링 설정
-  bufferMaxEntries: 0,
-  bufferCommands: false,
   
   // 기타 설정
   retryWrites: true,

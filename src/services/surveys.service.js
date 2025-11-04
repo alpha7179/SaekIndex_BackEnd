@@ -3,7 +3,7 @@
  */
 const Survey = require('../models/survey.model');
 const logger = require('../utils/logger');
-const { PAGINATION, SURVEY, AGE_GROUPS, MESSAGES } = require('../utils/constants');
+const { PAGINATION, SURVEY } = require('../utils/constants');
 const {
   isValidObjectId,
   isValidDateFormat,
@@ -11,8 +11,7 @@ const {
   normalizeAge,
   normalizeUserId,
   sanitizeString,
-  normalizePagination,
-  removeEmptyValues
+  normalizePagination
 } = require('../utils/helpers');
 
 /**
@@ -190,42 +189,7 @@ function normalizeSurveyData(payload) {
   return processedPayload;
 }
 
-/**
- * 사용자 ID 정규화
- * @param {*} userId - 원본 사용자 ID
- * @returns {number} 정규화된 사용자 ID (0-9999)
- */
-function normalizeUserId(userId) {
-  const value = parseInt(userId);
-  return isNaN(value) ? 0 : Math.max(0, Math.min(9999, value));
-}
 
-/**
- * 나이 정규화
- * @param {*} age - 원본 나이
- * @returns {number} 정규화된 나이 (1-100)
- */
-function normalizeAge(age) {
-  const value = parseInt(age);
-  if (isNaN(value) || value < 1 || value > 100) {
-    throw new Error('나이는 1-100 사이의 숫자여야 합니다.');
-  }
-  return value;
-}
-
-/**
- * 질문 응답 정규화
- * @param {*} response - 원본 응답
- * @param {string} fieldName - 필드명 (에러 메시지용)
- * @returns {number} 정규화된 응답 (1-5)
- */
-function normalizeQuestionResponse(response, fieldName) {
-  const value = parseInt(response);
-  if (isNaN(value) || value < 1 || value > 5) {
-    throw new Error(`${fieldName}은 1-5 사이의 숫자여야 합니다.`);
-  }
-  return value;
-}
 
 /**
  * 설문 통계 데이터 조회
@@ -284,7 +248,7 @@ async function getSurveyStats() {
  */
 function createEmptyStatsResponse() {
   const emptyDistribution = {};
-  CONSTANTS.QUESTION_FIELDS.forEach(field => {
+  SURVEY.QUESTION_FIELDS.forEach(field => {
     emptyDistribution[`${field}Distribution`] = {};
   });
 
@@ -427,7 +391,7 @@ async function getQuestionDistributionStats() {
   let totalScore = 0;
   let totalResponses = 0;
 
-  for (const field of CONSTANTS.QUESTION_FIELDS) {
+  for (const field of SURVEY.QUESTION_FIELDS) {
     const distribution = await Survey.aggregate([
       {
         $group: {
@@ -605,7 +569,7 @@ async function deleteSurvey(id) {
 function filterUpdateableFields(payload) {
   const allowedFields = [
     'name', 'age', 'date', 'isViewed',
-    ...CONSTANTS.QUESTION_FIELDS
+    ...SURVEY.QUESTION_FIELDS
   ];
 
   const updateData = {};
@@ -626,8 +590,8 @@ function filterUpdateableFields(payload) {
     }
 
     // 질문 필드 검증
-    if (CONSTANTS.QUESTION_FIELDS.includes(key)) {
-      const normalizedValue = normalizeQuestionResponse(value, key);
+    if (SURVEY.QUESTION_FIELDS.includes(key)) {
+      const normalizedValue = normalizeQuestionResponse(value);
       updateData[key] = normalizedValue;
     } else if (key === 'age') {
       updateData[key] = normalizeAge(value);
@@ -641,15 +605,7 @@ function filterUpdateableFields(payload) {
   return updateData;
 }
 
-/**
- * MongoDB ObjectId 유효성 검증
- * @param {string} id - 검증할 ID
- * @returns {boolean} 유효성 여부
- */
-function isValidObjectId(id) {
-  const mongoose = require('mongoose');
-  return mongoose.Types.ObjectId.isValid(id);
-}
+
 
 // 서비스 함수 내보내기
 module.exports = {
@@ -662,9 +618,5 @@ module.exports = {
   
   // 유틸리티 함수들 (테스트용)
   validateSurveyPayload,
-  normalizeSurveyData,
-  normalizeUserId,
-  normalizeAge,
-  normalizeQuestionResponse,
-  isValidObjectId
+  normalizeSurveyData
 };
