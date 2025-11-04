@@ -33,6 +33,9 @@ async function createSurvey(payload) {
 
 async function getSurveyStats() {
   const allSurveys = await Survey.find({});
+  console.log('[DEBUG] 전체 설문 수:', allSurveys.length);
+  console.log('[DEBUG] 첫 번째 설문 데이터:', allSurveys[0]);
+  
   if (allSurveys.length === 0) {
     return {
       totalSurveys: 0,
@@ -43,6 +46,11 @@ async function getSurveyStats() {
       question1Distribution: {},
       question2Distribution: {},
       question3Distribution: {},
+      question4Distribution: {},
+      question5Distribution: {},
+      question6Distribution: {},
+      question7Distribution: {},
+      question8Distribution: {},
       message: "No data available."
     };
   }
@@ -54,6 +62,11 @@ async function getSurveyStats() {
   const question1Distribution = {};
   const question2Distribution = {};
   const question3Distribution = {};
+  const question4Distribution = {};
+  const question5Distribution = {};
+  const question6Distribution = {};
+  const question7Distribution = {};
+  const question8Distribution = {};
 
   allSurveys.forEach(survey => {
     // 1. 연령대별 분포 집계
@@ -79,17 +92,40 @@ async function getSurveyStats() {
     dailyCounts[date] = (dailyCounts[date] || 0) + 1;
     hourlyCounts[hour] = (hourlyCounts[hour] || 0) + 1;
 
-    // 3. 문항별 응답 비율 집계
-    if (Array.isArray(survey.question1)) {
-      survey.question1.forEach(value => {
-        question1Distribution[value] = (question1Distribution[value] || 0) + 1;
-      });
+    // 3. 새로운 8개 심리 평가 질문에 대한 응답 분포 집계
+    if (survey.question1) {
+      question1Distribution[survey.question1] = (question1Distribution[survey.question1] || 0) + 1;
     }
     if (survey.question2) {
       question2Distribution[survey.question2] = (question2Distribution[survey.question2] || 0) + 1;
     }
     if (survey.question3) {
       question3Distribution[survey.question3] = (question3Distribution[survey.question3] || 0) + 1;
+    }
+    if (survey.question4) {
+      question4Distribution[survey.question4] = (question4Distribution[survey.question4] || 0) + 1;
+    } else {
+      console.log('[DEBUG] question4 없음:', survey._id);
+    }
+    if (survey.question5) {
+      question5Distribution[survey.question5] = (question5Distribution[survey.question5] || 0) + 1;
+    } else {
+      console.log('[DEBUG] question5 없음:', survey._id);
+    }
+    if (survey.question6) {
+      question6Distribution[survey.question6] = (question6Distribution[survey.question6] || 0) + 1;
+    } else {
+      console.log('[DEBUG] question6 없음:', survey._id);
+    }
+    if (survey.question7) {
+      question7Distribution[survey.question7] = (question7Distribution[survey.question7] || 0) + 1;
+    } else {
+      console.log('[DEBUG] question7 없음:', survey._id);
+    }
+    if (survey.question8) {
+      question8Distribution[survey.question8] = (question8Distribution[survey.question8] || 0) + 1;
+    } else {
+      console.log('[DEBUG] question8 없음:', survey._id);
     }
   });
 
@@ -105,6 +141,12 @@ async function getSurveyStats() {
     });
   });
 
+  console.log('[DEBUG] question4Distribution:', question4Distribution);
+  console.log('[DEBUG] question5Distribution:', question5Distribution);
+  console.log('[DEBUG] question6Distribution:', question6Distribution);
+  console.log('[DEBUG] question7Distribution:', question7Distribution);
+  console.log('[DEBUG] question8Distribution:', question8Distribution);
+
   return {
     totalSurveys: allSurveys.length,
     ageDistribution: Object.entries(ageDistribution).map(([range, count]) => ({ range, count })).sort((a,b) => parseInt(a.range) - parseInt(b.range)),
@@ -113,6 +155,11 @@ async function getSurveyStats() {
     question1Distribution,
     question2Distribution,
     question3Distribution,
+    question4Distribution,
+    question5Distribution,
+    question6Distribution,
+    question7Distribution,
+    question8Distribution,
     heatmapData
   };
 }

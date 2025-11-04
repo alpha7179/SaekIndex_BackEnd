@@ -518,28 +518,44 @@ Atlas 웹 콘솔에서 실시간 모니터링:
 ## 📁 프로젝트 구조
 
 ```
-BackEnd/
-├── .env                    # 환경 변수
+SaekIndex_BackEnd/
+├── .env                    # 환경 변수 (Git에서 제외)
+├── .env.example           # 환경 변수 템플릿
+├── .env.development       # 개발 환경 설정
+├── .env.production        # 프로덕션 환경 설정
 ├── .gitignore             # Git 무시 파일
+├── .github/
+│   └── workflows/
+│       └── ci.yml         # GitHub Actions CI/CD
+├── docs/
+│   └── api-spec.yaml      # OpenAPI 3.0 스펙
+├── jest.config.js         # Jest 테스트 설정
+├── nodemon.json           # Nodemon 개발 설정
 ├── package.json           # 프로젝트 설정 및 의존성
+├── scripts/
+│   └── deploy.sh          # 배포 스크립트
 ├── server.js              # 서버 진입점
-└── src/
-    ├── app.js             # Express 앱 설정
-    ├── config/
-    │   └── db.js          # MongoDB 연결 설정
-    ├── controllers/
-    │   └── surveys.controller.js  # 설문 컨트롤러
-    ├── middleware/
-    │   ├── error.middleware.js    # 에러 처리 미들웨어
-    │   └── notFound.middleware.js # 404 처리 미들웨어
-    ├── models/
-    │   └── survey.model.js        # 설문 데이터 모델
-    ├── routes/
-    │   └── surveys.routes.js      # 설문 라우터
-    ├── services/
-    │   └── surveys.service.js     # 설문 비즈니스 로직
-    └── utils/
-        └── asyncHandler.js        # 비동기 에러 처리 유틸
+├── src/
+│   ├── app.js             # Express 앱 설정
+│   ├── config/
+│   │   └── db.js          # MongoDB 연결 설정
+│   ├── controllers/
+│   │   └── surveys.controller.js  # 설문 컨트롤러
+│   ├── data/              # 데이터 파일 (현재 비어있음)
+│   ├── middleware/
+│   │   ├── error.middleware.js    # 에러 처리 미들웨어
+│   │   └── notFound.middleware.js # 404 처리 미들웨어
+│   ├── models/
+│   │   └── survey.model.js        # 설문 데이터 모델
+│   ├── routes/
+│   │   └── surveys.routes.js      # 설문 라우터
+│   ├── services/
+│   │   └── surveys.service.js     # 설문 비즈니스 로직
+│   └── utils/
+│       └── asyncHandler.js        # 비동기 에러 처리 유틸
+└── tests/
+    ├── setup.js           # 테스트 환경 설정
+    └── surveys.test.js    # 설문 API 테스트
 ```
 
 ## 🔌 API 엔드포인트

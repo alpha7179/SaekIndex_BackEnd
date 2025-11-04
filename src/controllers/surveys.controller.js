@@ -18,7 +18,16 @@ exports.getStats = asyncHandler(async (req, res) => {
   const stats = await service.getSurveyStats();
   res.json({ data: stats });
 });
-exports.updateSurvey = asyncHandler(async (req, res) => { /* ... */ });
+exports.updateSurvey = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const updated = await service.updateSurvey(id, req.body);
+  
+  if (!updated) {
+    return res.status(404).json({ error: { message: 'Survey not found' } });
+  }
+  
+  res.json({ data: updated });
+});
 exports.deleteSurvey = asyncHandler(async (req, res) => {
    const { id } = req.params;
   console.log(`[DELETE CONTROLLER] ID: ${id}에 대한 삭제 요청을 받았습니다.`);
