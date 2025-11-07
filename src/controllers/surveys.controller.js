@@ -9,11 +9,22 @@ const asyncHandler = require('../utils/asyncHandler');
  * POST /api/surveys
  */
 exports.createSurvey = asyncHandler(async (req, res) => {
-  console.log('[CONTROLLER] 설문 생성 요청 - IP:', req.ip, 'Body:', req.body);
+  console.log('[CONTROLLER] 설문 생성 요청 - IP:', req.ip);
+  console.log('[CONTROLLER] 요청 본문:', JSON.stringify(req.body, null, 2));
+  console.log('[CONTROLLER] 감정 데이터 포함 여부:', {
+    hasSurvey: !!req.body.survey,
+    hasExpression: !!req.body.expression,
+    hasTotal: !!req.body.total
+  });
   
   const created = await service.createSurvey(req.body);
   
   console.log('[CONTROLLER] 설문 생성 성공 - ID:', created._id);
+  console.log('[CONTROLLER] 저장된 감정 데이터:', {
+    hasSurvey: !!created.survey,
+    hasExpression: !!created.expression,
+    hasTotal: !!created.total
+  });
   
   res.status(201).json({ 
     success: true,

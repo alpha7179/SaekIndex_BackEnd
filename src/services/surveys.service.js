@@ -115,23 +115,48 @@ function buildQueryFilters(filters) {
  */
 async function createSurvey(payload) {
   try {
+    console.log('[DEBUG] createSurvey 호출됨 - 입력 데이터:', {
+      keys: Object.keys(payload),
+      hasSurvey: !!payload.survey,
+      hasExpression: !!payload.expression,
+      hasTotal: !!payload.total,
+      name: payload.name,
+      age: payload.age,
+      date: payload.date
+    });
+    
     // 입력 데이터 검증
     validateSurveyPayload(payload);
     
     // 데이터 정규화 및 변환
     const processedPayload = normalizeSurveyData(payload);
     
-    console.log('[DEBUG] Creating survey with processed data:', processedPayload);
+    console.log('[DEBUG] 정규화된 데이터:', {
+      keys: Object.keys(processedPayload),
+      hasSurvey: !!processedPayload.survey,
+      hasExpression: !!processedPayload.expression,
+      hasTotal: !!processedPayload.total,
+      survey: processedPayload.survey,
+      expression: processedPayload.expression,
+      total: processedPayload.total
+    });
     
     // 설문 생성 및 저장
     const survey = new Survey(processedPayload);
     const savedSurvey = await survey.save();
     
-    console.log('[DEBUG] Survey created successfully:', savedSurvey._id);
+    console.log('[DEBUG] Survey created successfully:', {
+      id: savedSurvey._id,
+      hasSurvey: !!savedSurvey.survey,
+      hasExpression: !!savedSurvey.expression,
+      hasTotal: !!savedSurvey.total
+    });
     return savedSurvey;
     
   } catch (error) {
     console.error('[SERVICE ERROR] createSurvey:', error);
+    console.error('[SERVICE ERROR] Error stack:', error.stack);
+    console.error('[SERVICE ERROR] Payload that caused error:', JSON.stringify(payload, null, 2));
     throw new Error(`설문 생성 실패: ${error.message}`);
   }
 }
@@ -185,6 +210,26 @@ function normalizeSurveyData(payload) {
   
   // 이름 정규화
   processedPayload.name = sanitizeString(payload.name, SURVEY.MAX_NAME_LENGTH);
+  
+  // 감정 데이터 보존 확인 (디버깅용)
+  if (payload.survey || payload.expression || payload.total) {
+    console.log('[DEBUG] 감정 데이터 감지:', {
+      hasSurvey: !!payload.survey,
+      hasExpression: !!payload.expression,
+      hasTotal: !!payload.total,
+      survey: payload.survey ? {
+        surveyDominantEmotion: payload.survey.surveyDominantEmotion,
+        surveyWeight: payload.survey.surveyWeight
+      } : null,
+      expression: payload.expression ? {
+        expressionDominantEmotion: payload.expression.expressionDominantEmotion,
+        expressionWeight: payload.expression.expressionWeight
+      } : null,
+      total: payload.total ? {
+        dominantEmotion: payload.total.dominantEmotion
+      } : null
+    });
+  }
   
   return processedPayload;
 }
