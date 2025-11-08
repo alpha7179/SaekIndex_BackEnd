@@ -7,6 +7,7 @@ const mongoose = require('mongoose');
 
 // 라우터 및 미들웨어 임포트
 const surveysRouter = require('./routes/surveys.routes');
+const emotionRouter = require('./routes/emotion.routes');
 const notFound = require('./middleware/notFound.middleware');
 const errorHandler = require('./middleware/error.middleware');
 const { sanitizeQuery } = require('./middleware/validation.middleware');
@@ -106,6 +107,7 @@ function createApp() {
   // === API 라우터 ===
   
   app.use('/api/surveys', surveysRouter);
+  app.use('/api/emotion', emotionRouter);
   
   // === 기본 정보 엔드포인트 ===
   
