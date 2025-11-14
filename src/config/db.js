@@ -7,18 +7,30 @@ const mongoose = require('mongoose');
 let isConnected = false;
 
 /**
- * MongoDB 연결 옵션
+ * MongoDB 연결 옵션 (t2.micro 최적화)
  */
 const getConnectionOptions = () => ({
-  // 연결 풀 설정
-  maxPoolSize: parseInt(process.env.DB_MAX_POOL_SIZE) || 10,
+  // 연결 풀 설정 (t2.micro 메모리 절약)
+  maxPoolSize: parseInt(process.env.DB_MAX_POOL_SIZE) || 5,  // 10 → 5로 감소
+  minPoolSize: parseInt(process.env.DB_MIN_POOL_SIZE) || 1,  // 최소 연결 유지
   
   // 타임아웃 설정
   serverSelectionTimeoutMS: parseInt(process.env.DB_SERVER_TIMEOUT) || 10000,
+  socketTimeoutMS: parseInt(process.env.DB_SOCKET_TIMEOUT) || 45000,
+  connectTimeoutMS: parseInt(process.env.DB_CONNECT_TIMEOUT) || 10000,
   
-  // 기타 설정
+  // 재시도 설정
   retryWrites: true,
-  w: 'majority'
+  retryReads: true,
+  
+  // 쓰기 설정
+  w: 'majority',
+  
+  // 압축 설정 (네트워크 대역폭 절약)
+  compressors: ['zlib'],
+  
+  // 자동 인덱스 생성 (개발 환경에서만)
+  autoIndex: process.env.NODE_ENV !== 'production'
 });
 
 /**

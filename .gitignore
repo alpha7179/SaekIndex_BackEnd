@@ -7,10 +7,27 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies
 node_modules
 dist
 dist-ssr
 *.local
+
+# Python
+.venv/
+.saekindex/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+*.pem
+/secret.txt
 
 # Editor directories and files
 .vscode/*
@@ -22,9 +39,13 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-*.env
-*.pem
-/.env
-/secret.txt
 
-node_modules
+# PM2
+.pm2/
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Backups
+backups/

@@ -4,12 +4,16 @@
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
+const compression = require('compression');
+const helmet = require('helmet');
 
 // 라우터 및 미들웨어 임포트
 const surveysRouter = require('./routes/surveys.routes');
+const emotionRouter = require('./routes/emotion.routes');
 const notFound = require('./middleware/notFound.middleware');
 const errorHandler = require('./middleware/error.middleware');
 const { sanitizeQuery } = require('./middleware/validation.middleware');
+const logger = require('./utils/logger');
 
 /**
  * Express 앱 생성 및 설정
@@ -19,6 +23,24 @@ function createApp() {
   
   // 신뢰할 수 있는 프록시 설정 (배포 환경용)
   app.set('trust proxy', 1);
+  
+  // === 보안 헤더 설정 (helmet) ===
+  app.use(helmet({
+    contentSecurityPolicy: false, // API 서버이므로 CSP 비활성화
+    crossOriginEmbedderPolicy: false
+  }));
+  
+  // === Gzip 압축 (응답 크기 30-50% 감소) ===
+  app.use(compression({
+    filter: (req, res) => {
+      if (req.headers['x-no-compression']) {
+        return false;
+      }
+      return compression.filter(req, res);
+    },
+    level: 6, // 압축 레벨 (1-9, 6이 기본값)
+    threshold: 1024 // 1KB 이상만 압축
+  }));
   
   // === 보안 및 CORS 설정 ===
   
@@ -52,23 +74,8 @@ function createApp() {
   // 쿼리 파라미터 정리
   app.use(sanitizeQuery);
   
-  // === 요청 로깅 미들웨어 ===
-  
-  app.use((req, res, next) => {
-    const timestamp = new Date().toISOString();
-    const method = req.method;
-    const url = req.originalUrl;
-    const ip = req.ip;
-    
-    console.log(`[${timestamp}] ${method} ${url} - IP: ${ip}`);
-    
-    // 개발 환경에서만 요청 본문 로깅
-    if (process.env.NODE_ENV !== 'production' && req.body && Object.keys(req.body).length > 0) {
-      console.log('Request Body:', JSON.stringify(req.body, null, 2));
-    }
-    
-    next();
-  });
+  // === 요청 로깅 미들웨어 (Winston) ===
+  app.use(logger.httpLogger);
   
   // === 헬스 체크 엔드포인트 ===
   
@@ -106,6 +113,7 @@ function createApp() {
   // === API 라우터 ===
   
   app.use('/api/surveys', surveysRouter);
+  app.use('/api/emotion', emotionRouter);
   
   // === 기본 정보 엔드포인트 ===
   
