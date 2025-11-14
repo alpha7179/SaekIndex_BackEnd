@@ -62,6 +62,10 @@ cd SaekIndex_BackEnd
 
 # Python 가상환경 생성 (.venv)
 python3.11 -m venv .venv
+
+# 만약 위 명령이 실패하면 아래 명령 시도:
+# python3 -m venv .venv
+
 source .venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt  # 5-10분 소요
@@ -196,10 +200,18 @@ cd SaekIndex_BackEnd
 
 ```bash
 # 가상환경 생성 (.venv)
-python3.11 -m venv .venv
+python3.11 -m venv .saekindex
+
+# 만약 위 명령이 실패하면 아래 방법 중 하나를 시도:
+# 방법 1: python3 사용
+# python3 -m venv .venv
+
+# 방법 2: virtualenv 사용
+# sudo apt install -y python3-virtualenv
+# virtualenv -p python3.11 .venv
 
 # 활성화
-source .venv/bin/activate
+source .saekindex/bin/activate
 
 # pip 업그레이드
 pip install --upgrade pip
@@ -458,7 +470,71 @@ free -h        # 메모리
 
 > 🐛 **자주 발생하는 문제와 해결 방법**
 
-## 1. Python 서버 시작 실패
+## 1. Python 가상환경 생성 실패
+
+**증상**:
+```bash
+python3.11 -m venv .venv
+# Error: No module named venv
+# 또는
+# The virtual environment was not created successfully
+```
+
+**원인**:
+- `python3.11-venv` 패키지가 설치되지 않음
+- Python 버전이 올바르게 설치되지 않음
+
+**해결 방법 1 - venv 패키지 설치**:
+```bash
+# venv 패키지 설치
+sudo apt install -y python3.11-venv
+
+# 다시 시도
+python3.11 -m venv .venv
+```
+
+**해결 방법 2 - python3 명령 사용**:
+```bash
+# 시스템 기본 python3 사용
+python3 -m venv .venv
+
+# Python 버전 확인
+python3 --version  # 3.10 이상이면 OK
+```
+
+**해결 방법 3 - virtualenv 사용**:
+```bash
+# virtualenv 설치
+sudo apt install -y python3-virtualenv
+
+# virtualenv로 가상환경 생성
+virtualenv -p python3.11 .venv
+
+# 또는 시스템 기본 Python 사용
+virtualenv .venv
+```
+
+**해결 방법 4 - Python 재설치**:
+```bash
+# Python 3.11 완전 재설치
+sudo apt remove -y python3.11
+sudo apt autoremove -y
+sudo apt update
+sudo apt install -y python3.11 python3.11-venv python3.11-dev python3-pip
+
+# 다시 시도
+python3.11 -m venv .venv
+```
+
+**가상환경 활성화 확인**:
+```bash
+source .venv/bin/activate
+python --version  # 가상환경의 Python 버전 확인
+which python      # 가상환경의 Python 경로 확인
+deactivate
+```
+
+## 2. Python 서버 시작 실패
 
 **증상**:
 ```
@@ -480,7 +556,7 @@ deactivate
 pm2 restart saekindex-backend
 ```
 
-## 2. 포트 접근 불가
+## 3. 포트 접근 불가
 
 **증상**:
 ```
@@ -499,7 +575,7 @@ pm2 logs
 netstat -tulpn | grep 4000
 ```
 
-## 3. MongoDB 연결 실패
+## 4. MongoDB 연결 실패
 
 **증상**:
 ```
@@ -516,7 +592,7 @@ cat .env | grep MONGODB_URI
 # 2. EC2 퍼블릭 IP 추가 또는 0.0.0.0/0 (모든 IP)
 ```
 
-## 4. 메모리 부족 (t2.micro)
+## 5. 메모리 부족 (t2.micro)
 
 **증상**:
 ```
@@ -538,7 +614,7 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 free -h
 ```
 
-## 5. 모델 파일 없음
+## 6. 모델 파일 없음
 
 **증상**:
 ```
