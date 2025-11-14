@@ -115,23 +115,34 @@ function buildQueryFilters(filters) {
  */
 async function createSurvey(payload) {
   try {
+    logger.debug('설문 생성 시작', {
+      hasSurvey: !!payload.survey,
+      hasExpression: !!payload.expression,
+      hasTotal: !!payload.total
+    });
+    
     // 입력 데이터 검증
     validateSurveyPayload(payload);
     
     // 데이터 정규화 및 변환
     const processedPayload = normalizeSurveyData(payload);
     
-    console.log('[DEBUG] Creating survey with processed data:', processedPayload);
-    
     // 설문 생성 및 저장
     const survey = new Survey(processedPayload);
     const savedSurvey = await survey.save();
     
-    console.log('[DEBUG] Survey created successfully:', savedSurvey._id);
+    // 캐시 무효화
+    const cacheService = require('./cache.service');
+    await cacheService.invalidateSurveyCache();
+    
+    logger.info('설문 생성 완료', { surveyId: savedSurvey._id });
     return savedSurvey;
     
   } catch (error) {
-    console.error('[SERVICE ERROR] createSurvey:', error);
+    logger.error('설문 생성 실패', { 
+      error: error.message,
+      stack: error.stack 
+    });
     throw new Error(`설문 생성 실패: ${error.message}`);
   }
 }
@@ -186,18 +197,37 @@ function normalizeSurveyData(payload) {
   // 이름 정규화
   processedPayload.name = sanitizeString(payload.name, SURVEY.MAX_NAME_LENGTH);
   
+  // 감정 데이터 보존 확인
+  if (payload.survey || payload.expression || payload.total) {
+    logger.debug('감정 데이터 포함', {
+      hasSurvey: !!payload.survey,
+      hasExpression: !!payload.expression,
+      hasTotal: !!payload.total
+    });
+  }
+  
   return processedPayload;
 }
 
 
 
 /**
- * 설문 통계 데이터 조회
+ * 설문 통계 데이터 조회 (캐싱 적용)
  * @returns {Object} 통계 데이터 객체
  */
 async function getSurveyStats() {
   try {
-    console.log('[DEBUG] 설문 통계 조회 시작');
+    const cacheService = require('./cache.service');
+    const cacheKey = 'survey:stats';
+    
+    // 캐시 확인
+    const cached = await cacheService.get(cacheKey);
+    if (cached) {
+      logger.info('통계 데이터 캐시 히트');
+      return cached;
+    }
+    
+    logger.debug('통계 데이터 캐시 미스 - DB 조회 시작');
     
     // MongoDB Aggregation을 사용한 효율적인 통계 계산
     const [
@@ -218,9 +248,7 @@ async function getSurveyStats() {
       return createEmptyStatsResponse();
     }
 
-    console.log('[DEBUG] 통계 계산 완료 - 총 설문 수:', totalCount);
-
-    return {
+    const stats = {
       totalSurveys: totalCount,
       ageDistribution: ageStats.distribution,
       averageAge: ageStats.average,
@@ -237,8 +265,14 @@ async function getSurveyStats() {
       }
     };
     
+    // 캐시 저장 (5분)
+    await cacheService.set(cacheKey, stats, 300);
+    logger.info('통계 데이터 계산 및 캐싱 완료', { totalSurveys: totalCount });
+    
+    return stats;
+    
   } catch (error) {
-    console.error('[SERVICE ERROR] getSurveyStats:', error);
+    logger.error('통계 조회 실패', { error: error.message });
     throw new Error(`통계 조회 실패: ${error.message}`);
   }
 }
@@ -470,8 +504,6 @@ async function updateSurvey(id, payload) {
     if (Object.keys(updateData).length === 0) {
       throw new Error('업데이트할 데이터가 없습니다.');
     }
-
-    console.log(`[UPDATE SURVEY SERVICE] ID: ${id}, updateData:`, updateData);
     
     const updatedSurvey = await Survey.findByIdAndUpdate(
       id, 
@@ -480,7 +512,7 @@ async function updateSurvey(id, payload) {
         new: true, 
         runValidators: true, 
         lean: true,
-        select: '-__v' // 버전 필드 제외
+        select: '-__v'
       }
     );
 
@@ -488,11 +520,15 @@ async function updateSurvey(id, payload) {
       throw new Error('설문을 찾을 수 없습니다.');
     }
 
-    console.log('[UPDATE SURVEY SERVICE] 설문이 성공적으로 업데이트되었습니다.');
+    // 캐시 무효화
+    const cacheService = require('./cache.service');
+    await cacheService.invalidateSurveyCache();
+    
+    logger.info('설문 업데이트 완료', { surveyId: id });
     return updatedSurvey;
     
   } catch (error) {
-    console.error('[SERVICE ERROR] updateSurvey:', error);
+    logger.error('설문 업데이트 실패', { surveyId: id, error: error.message });
     throw new Error(`설문 업데이트 실패: ${error.message}`);
   }
 }
@@ -509,8 +545,6 @@ async function updateIsViewed(id, isViewed = true) {
     if (!isValidObjectId(id)) {
       throw new Error('유효하지 않은 설문 ID입니다.');
     }
-
-    console.log(`[UPDATE ISVIEWED SERVICE] ID: ${id}, isViewed: ${isViewed}`);
     
     const result = await Survey.findByIdAndUpdate(
       id, 
@@ -522,11 +556,15 @@ async function updateIsViewed(id, isViewed = true) {
       throw new Error('설문을 찾을 수 없습니다.');
     }
 
-    console.log('[UPDATE ISVIEWED SERVICE] 감상여부가 성공적으로 업데이트되었습니다.');
+    // 캐시 무효화
+    const cacheService = require('./cache.service');
+    await cacheService.invalidateSurveyCache();
+    
+    logger.info('감상여부 업데이트 완료', { surveyId: id, isViewed });
     return result;
     
   } catch (error) {
-    console.error('[SERVICE ERROR] updateIsViewed:', error);
+    logger.error('감상여부 업데이트 실패', { surveyId: id, error: error.message });
     throw new Error(`감상여부 업데이트 실패: ${error.message}`);
   }
 }
@@ -542,21 +580,23 @@ async function deleteSurvey(id) {
     if (!isValidObjectId(id)) {
       throw new Error('유효하지 않은 설문 ID입니다.');
     }
-
-    console.log(`[DELETE SERVICE] ID: ${id} 설문 삭제 시도`);
     
     const deletedSurvey = await Survey.findByIdAndDelete(id, { lean: true });
     
     if (!deletedSurvey) {
-      console.log('[DELETE SERVICE] 삭제할 설문을 찾지 못했습니다.');
+      logger.warn('삭제할 설문을 찾을 수 없음', { surveyId: id });
       return null;
     }
 
-    console.log('[DELETE SERVICE] 설문이 성공적으로 삭제되었습니다.');
+    // 캐시 무효화
+    const cacheService = require('./cache.service');
+    await cacheService.invalidateSurveyCache();
+    
+    logger.info('설문 삭제 완료', { surveyId: id });
     return deletedSurvey;
     
   } catch (error) {
-    console.error('[SERVICE ERROR] deleteSurvey:', error);
+    logger.error('설문 삭제 실패', { surveyId: id, error: error.message });
     throw new Error(`설문 삭제 실패: ${error.message}`);
   }
 }

@@ -79,6 +79,38 @@ const SurveySchema = new Schema({
     type: Boolean, 
     default: false,
     index: true
+  },
+  
+  // 설문 기반 감정 분석 결과
+  survey: {
+    surveyDominantEmotion: { type: String },
+    surveyWeight: { type: Number, default: 0.5 },
+    angry: { type: Number, default: 0 },
+    sad: { type: Number, default: 0 },
+    neutral: { type: Number, default: 0 },
+    happy: { type: Number, default: 0 },
+    surprise: { type: Number, default: 0 }
+  },
+  
+  // CNN 모듈(웹캠) 기반 감정 분석 결과
+  expression: {
+    expressionDominantEmotion: { type: String },
+    expressionWeight: { type: Number, default: 0.5 },
+    angry: { type: Number, default: 0 },
+    sad: { type: Number, default: 0 },
+    neutral: { type: Number, default: 0 },
+    happy: { type: Number, default: 0 },
+    surprise: { type: Number, default: 0 }
+  },
+  
+  // 최종 융합 결과
+  total: {
+    dominantEmotion: { type: String },
+    angry: { type: Number, default: 0 },
+    sad: { type: Number, default: 0 },
+    neutral: { type: Number, default: 0 },
+    happy: { type: Number, default: 0 },
+    surprise: { type: Number, default: 0 }
   }
 }, { 
   timestamps: true,
