@@ -126,6 +126,27 @@ exports.updateIsViewed = asyncHandler(async (req, res) => {
 });
 
 /**
+ * 활성 큐 상태 업데이트
+ * PATCH /api/surveys/:id/active-queue
+ */
+exports.updateIsActiveQueue = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { isActiveQueue = true } = req.body;
+  
+  logger.info('활성 큐 상태 업데이트 요청', { surveyId: id, isActiveQueue });
+  
+  const updated = await service.updateIsActiveQueue(id, isActiveQueue);
+  
+  logger.info('활성 큐 상태 업데이트 성공', { surveyId: id });
+  
+  res.json({ 
+    success: true,
+    data: updated,
+    message: '활성 큐 상태가 성공적으로 업데이트되었습니다.'
+  });
+});
+
+/**
  * 설문 삭제
  * DELETE /api/surveys/:id
  */

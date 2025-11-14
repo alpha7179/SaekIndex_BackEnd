@@ -570,6 +570,42 @@ async function updateIsViewed(id, isViewed = true) {
 }
 
 /**
+ * 활성 큐 상태 업데이트
+ * @param {string} id - 설문 ID
+ * @param {boolean} isActiveQueue - 활성 큐 상태
+ * @returns {Object} 업데이트된 설문 객체
+ */
+async function updateIsActiveQueue(id, isActiveQueue = true) {
+  try {
+    // ID 유효성 검증
+    if (!isValidObjectId(id)) {
+      throw new Error('유효하지 않은 설문 ID입니다.');
+    }
+    
+    const result = await Survey.findByIdAndUpdate(
+      id, 
+      { $set: { isActiveQueue: Boolean(isActiveQueue) } }, 
+      { new: true, lean: true, select: '-__v' }
+    );
+    
+    if (!result) {
+      throw new Error('설문을 찾을 수 없습니다.');
+    }
+
+    // 캐시 무효화
+    const cacheService = require('./cache.service');
+    await cacheService.invalidateSurveyCache();
+    
+    logger.info('활성 큐 상태 업데이트 완료', { surveyId: id, isActiveQueue });
+    return result;
+    
+  } catch (error) {
+    logger.error('활성 큐 상태 업데이트 실패', { surveyId: id, error: error.message });
+    throw new Error(`활성 큐 상태 업데이트 실패: ${error.message}`);
+  }
+}
+
+/**
  * 설문 삭제
  * @param {string} id - 설문 ID
  * @returns {Object} 삭제된 설문 객체
@@ -608,7 +644,7 @@ async function deleteSurvey(id) {
  */
 function filterUpdateableFields(payload) {
   const allowedFields = [
-    'name', 'age', 'date', 'isViewed',
+    'name', 'age', 'date', 'isViewed', 'isActiveQueue',
     ...SURVEY.QUESTION_FIELDS
   ];
 
@@ -654,6 +690,7 @@ module.exports = {
   getSurveyStats,
   updateSurvey,
   updateIsViewed,
+  updateIsActiveQueue,
   deleteSurvey,
   
   // 유틸리티 함수들 (테스트용)

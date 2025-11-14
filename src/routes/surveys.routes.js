@@ -70,6 +70,15 @@ router.patch('/:id/viewed',
 );
 
 /**
+ * 활성 큐 상태 업데이트
+ * PATCH /api/surveys/:id/active-queue
+ */
+router.patch('/:id/active-queue', 
+  validateSurveyId,
+  asyncHandler(controller.updateIsActiveQueue)
+);
+
+/**
  * 설문 삭제
  * DELETE /api/surveys/:id
  */

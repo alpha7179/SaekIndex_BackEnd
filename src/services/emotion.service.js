@@ -32,16 +32,25 @@ async function startPythonServer() {
     const pythonScriptPath = path.join(__dirname, 'emotion_server.py');
     
     // Windows와 Linux 가상환경 경로 처리
-    const venvDir = process.platform === 'win32' ? 'Scripts' : 'bin';
-    const pythonExe = process.platform === 'win32' ? 'python.exe' : 'python3';
+    const isWindows = process.platform === 'win32';
+    const venvDir = isWindows ? 'Scripts' : 'bin';
+    const pythonExe = isWindows ? 'python.exe' : 'python3';
     
-    // .venv 또는 .saekindex 가상환경 확인
-    let venvPythonPath = path.join(backendRoot, '.venv', venvDir, pythonExe);
-    if (!fs.existsSync(venvPythonPath)) {
-      venvPythonPath = path.join(backendRoot, '.saekindex', venvDir, pythonExe);
+    // 가상환경 우선순위: .venv (EC2) > .saekindex (로컬)
+    const venvPaths = [
+      path.join(backendRoot, '.venv', venvDir, pythonExe),      // EC2/Linux
+      path.join(backendRoot, '.saekindex', venvDir, pythonExe)  // 로컬/Windows
+    ];
+    
+    let venvPythonPath = null;
+    for (const venvPath of venvPaths) {
+      if (fs.existsSync(venvPath)) {
+        venvPythonPath = venvPath;
+        break;
+      }
     }
     
-    const pythonExecutable = fs.existsSync(venvPythonPath) ? venvPythonPath : 'python';
+    const pythonExecutable = venvPythonPath || (isWindows ? 'python' : 'python3');
 
     if (!fs.existsSync(pythonScriptPath)) {
       throw new Error(`Python server script not found: ${pythonScriptPath}`);

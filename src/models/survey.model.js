@@ -81,6 +81,13 @@ const SurveySchema = new Schema({
     index: true
   },
   
+  // 활성 큐 상태 (시각화 페이지에서 "나의 감정 보기" 선택 시 활성화)
+  isActiveQueue: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  
   // 설문 기반 감정 분석 결과
   survey: {
     surveyDominantEmotion: { type: String },
@@ -198,6 +205,11 @@ SurveySchema.pre('save', function(next) {
   // isViewed 기본값 설정
   if (this.isViewed === undefined || this.isViewed === null) {
     this.isViewed = false;
+  }
+  
+  // isActiveQueue 기본값 설정
+  if (this.isActiveQueue === undefined || this.isActiveQueue === null) {
+    this.isActiveQueue = false;
   }
   
   // 이름 정규화
